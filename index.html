@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提納里搖尾巴</title>
+    <script src="https://blocklypro.webduino.io/node_modules/jquery/dist/jquery.min.js?rev=2f6b11a7e914718e0290410e85366fe9"></script>
+    <script src="https://blocklypro.webduino.io/dist/lib/webduino-all-0.4.20.min.js?rev=4426739c00d85325cb2d3d701fa50666"></script>
+    <script src="https://blocklypro.webduino.io/dist/webduino-blockly.min.js?rev=a58c17a279091d8dc64355122211c460"></script>
+    <script src="https://blocklypro.webduino.io/dist/lib/firebase.min.js?rev=c0bfd493efd477d098a4ae9e92b13880"></script>
+    <script src="https://blocklypro.webduino.io/dist/lib/runtime.min.js?rev=683a69503433786202911b4d9f766100"></script>
+    <script src="https://blocklypro.webduino.io/node_modules/webduino-module-irled/IRLed.js"></script>
+    <script src="https://blocklypro.webduino.io/node_modules/webduino-module-irled/IRLed-blockly.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="container-fluid p-2 bg-success text-white text-center">
+        <h1>提納里搖尾巴</h1>
+        <p>按下按鈕，用你的聲音親自讓提納里的尾巴動起來！</p> 
+    </div>
+    <div class="container mt-2 text-center">
+        <button type="button" class="btn btn-outline-primary" id="start-btn">按我開始</button>
+        <p class="fst-italic">本介面採用語音辨識技術<br>請允許瀏覽器存取你的麥克風才能正常運作</p>
+    </div>
+    <div class="containter text-center">
+        <img id="result-sticker" src="">
+        <p id="result-text">點選「按我開始」並開始說話，辨識結果會出現在這裡</p>
+    </div>
+
+    <script>
+        // Webduino
+        var irled;
+        boardReady({device: '<你的裝置ID>'}, function (board) {
+            board.samplingInterval = 250;
+            irled = getIRLed(board, "ffffffff");
+        });
+
+        // 可能的誤辨識
+        const customTerms = {
+            "小提": ["腳蹄", "腳皮", "小堤"], 
+            "提納里": ["提那裡", "提哪裡", "皮那裡"]
+        };
+        function correctTranscript(transcript) {
+            for (const term in customTerms) {
+                customTerms[term].forEach((incorrect) => {
+                if (transcript.includes(incorrect)) 
+                    transcript = transcript.replace(new RegExp(incorrect, "g"), term);
+                
+                });
+            }
+        return transcript;
+        } // correctTranscript()
+
+        // 檢查瀏覽器是否支援 Web Speech API
+        if (!('webkitSpeechRecognition' in window)) {
+            alert("您的瀏覽器不支援語音辨識功能。請使用支援的瀏覽器，例如 Google Chrome。");
+        } else {
+            const recognition = new webkitSpeechRecognition();
+            recognition.lang = "zh-TW";
+            recognition.interimResults = false;
+            recognition.continuous = false;
+
+            const startBtn = document.getElementById('start-btn');
+            const resultText = document.getElementById('result-text');
+
+            let isListening = false;
+
+            // 點擊按鈕開始或停止語音辨識
+            startBtn.addEventListener('click', () => {
+                if (isListening) {
+                    recognition.stop(); // 手動停止
+                    startBtn.textContent = "按我開始";
+                    resultText.textContent = "點選「按我開始」並開始說話，辨識結果會出現在這裡";
+                } else {
+                    recognition.start();
+                    isListening = true;
+                    startBtn.textContent = "正在辨識...";
+                    resultText.textContent = "正在聆聽...";
+                }
+            });
+
+            // 語音辨識成功回傳結果
+            recognition.onresult = (event) => {
+                var transcript = event.results[0][0].transcript;
+                transcript = correctTranscript(transcript);
+
+                if (transcript == "小提好可愛" || transcript == "提納里好可愛") {
+                    irled.send('<開始搖尾巴的控制碼>');
+                    resultText.textContent = "恭喜觸發隱藏條件！";
+                } // if
+                else if ( transcript == "提納里超帥" || transcript == "小提超帥") {
+                    irled.send('<加速搖尾巴的控制碼>');
+                    document.getElementById("result-sticker").src = "success.png";
+                    resultText.textContent = "謝謝你，我好開心！";
+                } // else if
+                else {
+                    document.getElementById("result-sticker").src = "failed.png";
+                    resultText.textContent = "「"+transcript+"」這句話並不是隱藏條件，請再想想看！<br>提示：「誰」好可愛？";
+                } // else
+            };
+
+            // 當語音辨識完成
+            recognition.onend = () => {
+                isListening = false;
+                startBtn.textContent = "按我開始"; // 恢復按鈕文字
+                resultText.textContent = "點選「按我開始」並開始說話，辨識結果會出現在這裡";
+            };
+
+            // 處理辨識錯誤
+            recognition.onerror = (event) => {
+                resultText.textContent = "辨識失敗，請再試一次。";
+                isListening = false;
+                startBtn.textContent = "按我開始"; // 恢復按鈕文字
+            };
+        }
+    </script>
+</body>
+</html>
